@@ -570,32 +570,175 @@ h1 {
     opacity: 0.8;
 }
 
-/* ===== RESPONSIVO ===== */
+/* ===== RESPONSIVO - CELULAR ===== */
 @media (max-width: 768px) {
     h1 {
-        font-size: 2rem;
-        letter-spacing: 2px;
+        font-size: 1.5rem !important;
+        letter-spacing: 1px !important;
     }
-    
+
+    .toggle-buttons {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+
     .btn {
-        padding: 10px 20px;
-        font-size: 0.9rem;
+        padding: 10px 14px !important;
+        font-size: 0.85rem !important;
     }
-    
-    .palpite-summary h2 {
-        font-size: 1.8rem;
-    }
-    
-    .stat-box .stat-value {
-        font-size: 2rem;
-    }
-    
-    .group-title {
-        font-size: 1.8rem;
-    }
-    
+
     .filter-container {
-        flex-direction: column;
-        align-items: stretch;
+        padding: 12px !important;
+        gap: 10px !important;
+    }
+
+    .filter-group select {
+        min-width: 150px !important;
+        font-size: 0.9rem !important;
+        padding: 8px 12px !important;
+    }
+
+    .group-title {
+        font-size: 1.5rem !important;
+        letter-spacing: 2px !important;
+    }
+
+    .results-container {
+        padding: 10px !important;
+        overflow-x: auto !important;
+    }
+
+    /* Tabela de jogos - mobile */
+    .games-table {
+        font-size: 0.85rem !important;
+        min-width: 100% !important;
+    }
+
+    .games-table th,
+    .games-table td {
+        padding: 10px 6px !important;
+        font-size: 0.8rem !important;
+    }
+
+    .games-table .date {
+        font-size: 0.75rem !important;
+        white-space: nowrap !important;
+    }
+
+    .games-table .teams {
+        font-size: 0.8rem !important;
+    }
+
+    .games-table .result {
+        font-size: 0.9rem !important;
+    }
+
+    /* Tabela de palpites - mobile */
+    .predictions-table {
+        font-size: 0.75rem !important;
+    }
+
+    .predictions-table th,
+    .predictions-table td {
+        padding: 8px 4px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .predictions-table .col-date {
+        font-size: 0.7rem !important;
+    }
+
+    .predictions-table .col-match {
+        font-size: 0.75rem !important;
+    }
+
+    .predictions-table .prediction {
+        font-size: 0.8rem !important;
+        padding: 4px 8px !important;
+    }
+
+    .predictions-table .points {
+        font-size: 0.9rem !important;
+    }
+
+    /* Cards do ranking - mobile */
+    #ranking-grid {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+    }
+
+    .card {
+        padding: 20px !important;
+    }
+
+    .card h2 {
+        font-size: 1.2rem !important;
+    }
+
+    .card h3 {
+        font-size: 1.8rem !important;
+    }
+
+    .position {
+        font-size: 2rem !important;
+    }
+
+    /* Resumo de palpites - mobile */
+    .palpite-summary {
+        padding: 15px !important;
+    }
+
+    .palpite-summary h2 {
+        font-size: 1.3rem !important;
+    }
+
+    .summary-stats {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 8px !important;
+    }
+
+    .stat-box {
+        padding: 10px 8px !important;
+    }
+
+    .stat-box .stat-value {
+        font-size: 1.5rem !important;
+    }
+
+    .stat-box .stat-label {
+        font-size: 0.65rem !important;
+    }
+
+    .ranking-position {
+        font-size: 1rem !important;
+        padding: 10px 20px !important;
+    }
+}
+
+/* ===== CELULAR MUITO PEQUENO ===== */
+@media (max-width: 400px) {
+    h1 {
+        font-size: 1.2rem !important;
+    }
+
+    .btn {
+        padding: 8px 10px !important;
+        font-size: 0.75rem !important;
+    }
+
+    .games-table th,
+    .games-table td {
+        padding: 8px 4px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .predictions-table th,
+    .predictions-table td {
+        padding: 6px 3px !important;
+        font-size: 0.65rem !important;
+    }
+
+    .summary-stats {
+        grid-template-columns: repeat(2, 1fr) !important;
     }
 }
