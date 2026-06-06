@@ -1,151 +1,48 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arges Refrigeração</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    body {
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
-      background-color: #f9f9f9;
-    }
-    header {
-      background-color: #004466;
-      color: #fff;
-      padding: 1.5rem;
-      text-align: center;
-    }
-    nav {
-      background-color: #006699;
-      text-align: center;
-      padding: 0.8rem;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-    }
-    nav a {
-      color: white;
-      text-decoration: none;
-      margin: 0 1rem;
-      font-weight: bold;
-    }
-    .hero {
-      background: url('https://via.placeholder.com/1200x400') center/cover no-repeat;
-      height: 400px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: rgb(0, 0, 0);
-      text-shadow: 2px 2px 5px rgba(0,0,0,0.7);
-      font-size: 2rem;
-      font-weight: bold;
-    }
-    section {
-      padding: 2rem;
-      max-width: 1000px;
-      margin: auto;
-    }
-    .servicos {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1.5rem;
-    }
-    .servico {
-      background: #e1f5fe;
-      padding: 1rem;
-      border-radius: 8px;
-    }
-    .contato {
-      background: #004466;
-      color: white;
-      text-align: center;
-      padding: 2rem 1rem;
-    }
-    footer {
-      background-color: #003344;
-      color: white;
-      text-align: center;
-      padding: 1rem;
-    }
-    .zap {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1000;
-    }
-    .zap a {
-      background-color: #25d366;
-      color: white;
-      padding: 0.8rem 1rem;
-      border-radius: 50px;
-      text-decoration: none;
-      font-weight: bold;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏆 Bolão da Copa 2026</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>Arges Refrigeração</h1>
-    <p>Especialistas em Climatização Residencial e Industrial</p>
-  </header>
-
-  <nav>
-    <a href="#sobre">Sobre</a>
-    <a href="#servicos">Serviços</a>
-    <a href="#contato">Contato</a>
-  </nav>
-
-  <div class="hero">
-    Conforto e Eficiência Térmica para o seu Espaço
-  </div>
-
-  <section id="sobre">
-    <h2>Sobre a Arges</h2>
-    <p>Somos uma empresa comprometida com a qualidade na instalação e manutenção de sistemas de refrigeração. Atuamos tanto em residências quanto em ambientes industriais, com técnicos especializados e equipamentos modernos.</p>
-  </section>
-
-  <section id="servicos">
-    <h2>Serviços</h2>
-    <div class="servicos">
-      <div class="servico">
-        <h3>Instalação de Ar-condicionado</h3>
-        <p>Residencial, comercial e industrial, com acabamento profissional.</p>
-      </div>
-      <div class="servico">
-        <h3>Manutenção preventiva</h3>
-        <p>Evite paradas inesperadas com checkups regulares.</p>
-      </div>
-      <div class="servico">
-        <h3>Manutenção corretiva</h3>
-        <p>Correção de falhas em sistemas domésticos e industriais.</p>
-      </div>
-      <div class="servico">
-        <h3>Higienização</h3>
-        <p>Limpeza de filtros e dutos para melhor qualidade do ar.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="contato" class="contato">
-    <h2>Entre em Contato</h2>
-    <p>Fale conosco no WhatsApp ou nos siga nas redes sociais:</p>
-    <p><strong>Telefone/WhatsApp:</strong> <a href="https://wa.me/5521979247857" style="color: #fff; text-decoration: underline;">(00) 00000-0000</a></p>
-    <p><strong>Instagram:</strong> <a href="https://instagram.com/SEU_PERFIL" style="color: #fff; text-decoration: underline;">@arges_refrigeracao</a></p>
-  </section>
-
-  <footer>
-    <p>&copy; 2025 Arges Refrigeração. Todos os direitos reservados.</p>
-  </footer>
-
-  <div class="zap">
-    <a href="https://wa.me/5521979247857" target="_blank">WhatsApp</a>
-  </div>
+    <header>
+        <h1>🏆 Bolão da Copa 2026</h1>
+        <div class="toggle-buttons">
+            <button id="btn-ranking" class="btn">🏅 Placar Geral</button>
+            <button id="btn-jogos" class="btn">⚽ Jogos</button>
+            <button id="btn-palpites" class="btn">🎯 Palpites</button>
+            <button id="btn-refresh" class="btn" style="background: rgba(255,215,0,0.2); border-color: var(--gold);">🔄 Atualizar</button>
+        </div>
+        <div id="filter-container" class="filter-container" style="display: none;">
+            <div class="filter-group">
+                <label for="select-participant">👤 Participante:</label>
+                <select id="select-participant">
+                    <option value="">Selecione...</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="select-group"> Grupo:</label>
+                <select id="select-group">
+                    <option value="todos">Todos os Grupos</option>
+                    <option value="A">Grupo A</option>
+                    <option value="B">Grupo B</option>
+                    <option value="C">Grupo C</option>
+                    <option value="D">Grupo D</option>
+                    <option value="E">Grupo E</option>
+                    <option value="F">Grupo F</option>
+                    <option value="G">Grupo G</option>
+                    <option value="H">Grupo H</option>
+                    <option value="I">Grupo I</option>
+                    <option value="J">Grupo J</option>
+                    <option value="K">Grupo K</option>
+                    <option value="L">Grupo L</option>
+                </select>
+            </div>
+        </div>
+    </header>
+    <main id="content"></main>
+    <script src="script.js"></script>
 </body>
 </html>
