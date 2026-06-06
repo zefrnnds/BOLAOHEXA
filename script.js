@@ -8,9 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectParticipant = document.getElementById('select-participant');
     const selectGroup = document.getElementById('select-group');
     
-    // ✅ VOLTAMOS PARA O SHEETDB (FUNCIONAVA ANTES)
-       const API_BASE = 'https://script.google.com/macros/s/AKfycby62NI1pid2BY6Y61RjFfYf3T-hJxNe9sKd86gaJ8aqhMTzsaFYvvWWwbHWIgsllroU/exec';
- 
+    // ⚠️ COLE AQUI A NOVA URL DO APPS SCRIPT
+    const API_BASE = 'https://script.google.com/macros/s/AKfycby62NI1pid2BY6Y61RjFfYf3T-hJxNe9sKd86gaJ8aqhMTzsaFYvvWWwbHWIgsllroU/exec';
     
     let currentView = null;
     let resultadosCache = {};
@@ -31,10 +30,21 @@ document.addEventListener('DOMContentLoaded', () => {
         'GREI': 'GREISON',
         'ROG': 'ROGERIO',
         'ROM': 'ROMULO',
+        'REGINALDINHO': 'REGINALDINHO',
+        'RICARDINHO': 'RICARDINHO',
         'REGINALDO': 'REGINALDO'
     };
 
-    const showLoading = (msg = ' Carregando dados... 🏟️') => {
+    // Mapeamento reverso: nome exibido → chave da aba
+    const nomeParaChave = {};
+    Object.entries(participantesMap).forEach(([chave, nome]) => {
+        nomeParaChave[nome] = chave;
+        nomeParaChave[nome.replace(/\s*\(.*\)\s*/g, '').trim()] = chave;
+        nomeParaChave[chave.toUpperCase()] = chave;
+        nomeParaChave[chave] = chave;
+    });
+
+    const showLoading = (msg = '⏳ Carregando dados... 🏟️') => {
         contentEl.innerHTML = `<p class="loading">${msg}</p>`;
     };
 
@@ -42,13 +52,56 @@ document.addEventListener('DOMContentLoaded', () => {
         contentEl.innerHTML = `<p class="error">❌ ${msg}</p>`;
     };
 
-    // ✅ CACHE DE 2 HORAS PARA EVITAR RATE LIMIT
-    async function fetchData(sheetName) {
+    // ✅ NORMALIZAÇÃO DE DADOS - Renomeia coluna de data automaticamente
+    function normalizarDados(dados, nomeAba) {
+        if (!dados || dados.length === 0) return dados;
+        
+        const primeiraLinha = dados[0];
+        const colunas = Object.keys(primeiraLinha);
+        
+        // Procura coluna de data
+        let colunaData = null;
+        
+        if (colunas.includes('DATA_HORA')) {
+            colunaData = 'DATA_HORA';
+        } else if (colunas.includes(nomeAba)) {
+            colunaData = nomeAba;
+        } else {
+            for (const col of colunas) {
+                const valor = primeiraLinha[col];
+                if (valor && typeof valor === 'string') {
+                    if (valor.includes('GRUPO') || 
+                        /\d{2}\/\d{2}\/\d{4}/.test(valor) ||
+                        col.toLowerCase().includes('data')) {
+                        colunaData = col;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Renomeia coluna se necessário
+        if (colunaData && colunaData !== 'DATA_HORA') {
+            dados = dados.map(row => {
+                const newRow = {...row};
+                newRow['DATA_HORA'] = newRow[colunaData];
+                if (colunaData !== 'DATA_HORA') {
+                    delete newRow[colunaData];
+                }
+                return newRow;
+            });
+        }
+        
+        return dados;
+    }
+
+    // ✅ FETCH COM RETRY E PROTEÇÃO
+    async function fetchData(sheetName, tentativas = 2) {
         const cacheKey = `cache_${sheetName}`;
         const cacheTimeKey = `cache_time_${sheetName}`;
-        const cacheExpira = 2 * 60 * 60 * 1000; // 2 HORAS
+        const cacheExpira = 2 * 60 * 60 * 1000; // 2 horas
         
-        // Tenta usar cache primeiro
+        // Tenta cache primeiro
         try {
             const cachedData = localStorage.getItem(cacheKey);
             const cachedTime = localStorage.getItem(cacheTimeKey);
@@ -56,61 +109,56 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cachedData && cachedTime) {
                 const tempoDecorrido = Date.now() - parseInt(cachedTime);
                 if (tempoDecorrido < cacheExpira) {
-                    console.log(`💾 Cache usado para ${sheetName} (válido por mais ${Math.round((cacheExpira - tempoDecorrido) / 60000)} min)`);
                     return JSON.parse(cachedData);
                 }
             }
-        } catch (e) {
-            console.warn('Erro ao ler cache:', e);
-        }
+        } catch (e) {}
 
-        try {
-            const url = `${API_BASE}?sheet=${encodeURIComponent(sheetName)}`;
-            console.log(`📡 Buscando: ${sheetName}`);
-            
-            const res = await fetch(url);
-            
-            if (res.status === 429) {
-                console.log('⚠️ Rate limit - usando cache se disponível');
-                const cachedData = localStorage.getItem(cacheKey);
-                if (cachedData) return JSON.parse(cachedData);
-                return null;
-            }
-            
-            if (!res.ok) {
-                console.error(`❌ Erro ${res.status} na aba: ${sheetName}`);
-                return null;
-            }
-            
-            const data = await res.json();
-            
-            // Salva no cache
+        // Tenta buscar na API
+        for (let i = 0; i < tentativas; i++) {
             try {
-                localStorage.setItem(cacheKey, JSON.stringify(data));
-                localStorage.setItem(cacheTimeKey, Date.now().toString());
-            } catch (e) {
-                console.warn('Erro ao salvar cache:', e);
+                const url = `${API_BASE}?sheet=${encodeURIComponent(sheetName)}`;
+                const res = await fetch(url);
+                
+                if (res.status === 429) {
+                    const cachedData = localStorage.getItem(cacheKey);
+                    if (cachedData) return JSON.parse(cachedData);
+                    await new Promise(r => setTimeout(r, 2000));
+                    continue;
+                }
+                
+                if (!res.ok) {
+                    if (i < tentativas - 1) {
+                        await new Promise(r => setTimeout(r, 1000));
+                        continue;
+                    }
+                    return null;
+                }
+                
+                const data = await res.json();
+                
+                // Salva no cache
+                try {
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
+                    localStorage.setItem(cacheTimeKey, Date.now().toString());
+                } catch (e) {}
+                
+                return data;
+                
+            } catch (err) {
+                if (i < tentativas - 1) {
+                    await new Promise(r => setTimeout(r, 1000));
+                }
             }
-            
-            console.log(`✅ ${sheetName}: ${data.length} linhas`);
-            return data;
-            
-        } catch (err) {
-            console.error(`Erro ao buscar ${sheetName}:`, err);
-            return null;
         }
-    }
-
-    // ✅ FORÇAR ATUALIZAÇÃO (limpa cache)
-    async function forcarAtualizacao(sheetName) {
-        const cacheKey = `cache_${sheetName}`;
-        const cacheTimeKey = `cache_time_${sheetName}`;
         
-        localStorage.removeItem(cacheKey);
-        localStorage.removeItem(cacheTimeKey);
+        // Se tudo falhar, tenta cache antigo
+        try {
+            const cachedData = localStorage.getItem(cacheKey);
+            if (cachedData) return JSON.parse(cachedData);
+        } catch (e) {}
         
-        console.log(` Cache limpo para ${sheetName}, buscando dados frescos...`);
-        return await fetchData(sheetName);
+        return null;
     }
 
     const todosJogos = {
@@ -214,19 +262,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderRanking(data) {
         if (!data || data.length === 0) {
-            contentEl.innerHTML = '<p class="error">❌ Nenhum dado encontrado na aba PLACAR GERAL</p>';
+            showError('Nenhum dado encontrado na aba PLACAR GERAL');
             return;
         }
 
-        console.log(' Dados do PLACAR GERAL:', data);
-        
         const dados = data.filter(j => j.PLACAR && j.PLACAR !== 'PLACAR' && j.GERAL !== undefined);
         dados.sort((a, b) => Number(b.GERAL || 0) - Number(a.GERAL || 0));
         
         let html = '<div id="ranking-grid">';
         
         dados.forEach((j, i) => {
-            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '' : `${i + 1}º`;
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
             const cls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
             const total = Number(j.GERAL || 0);
             
@@ -238,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const gols = Number(j['TOTAL DE GOLS +3'] || 0);
             
             html += `
-                <div class="card ${cls}">
+                <div class="card ${cls} clickable-card" data-participant="${j.PLACAR}">
                     <div class="position">${medal}</div>
                     <h2>${j.PLACAR}</h2>
                     <h3>${total} pts</h3>
@@ -247,13 +293,52 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p><span>✅ Vencedor + 1 (15):</span> <strong>${pts15}</strong></p>
                         <p><span>🏆 Só Vencedor (10):</span> <strong>${pts10}</strong></p>
                         <p><span>⚽ Só 1 Placar (5):</span> <strong>${pts5}</strong></p>
-                        ${zebra > 0 ? `<p><span>🦓 Zebra Bônus:</span> <strong>+${zebra}</strong></p>` : ''}
-                        ${gols > 0 ? `<p><span>⚽ Total de Gols:</span> <strong>+${gols}</strong></p>` : ''}
+                        <p><span>🦓 Zebra Bônus(5):</span> <strong>${zebra}</strong></p>
+                        <p><span>⚽ Total de Gols(3):</span> <strong>${gols}</strong></p>
                     </div>
+                    <div class="card-click-hint">👆 Clique para ver palpites</div>
                 </div>`;
         });
         html += '</div>';
         contentEl.innerHTML = html;
+        
+        document.querySelectorAll('.clickable-card').forEach(card => {
+            card.addEventListener('click', () => {
+                irParaPalpitesDoParticipante(card.getAttribute('data-participant'));
+            });
+        });
+    }
+
+    async function irParaPalpitesDoParticipante(nomeParticipante) {
+        const chaveAba = nomeParaChave[nomeParticipante] || 
+                        nomeParaChave[nomeParticipante.toUpperCase()] ||
+                        Object.keys(participantesMap).find(chave => 
+                            participantesMap[chave].toUpperCase() === nomeParticipante.toUpperCase()
+                        );
+        
+        if (!chaveAba) {
+            alert(`Não foi possível encontrar os palpites de ${nomeParticipante}`);
+            return;
+        }
+        
+        currentView = 'palpites';
+        document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+        btnPalpites.classList.add('active');
+        filterContainer.style.display = 'flex';
+        selectParticipant.parentElement.style.display = 'flex';
+        selectGroup.parentElement.style.display = 'flex';
+        selectParticipant.value = chaveAba;
+        
+        if (Object.keys(resultadosCache).length === 0) {
+            showLoading('⏳ Buscando resultados dos jogos...');
+            const dataJogos = await fetchData('Jogos');
+            if (dataJogos) resultadosCache = buscarResultados(dataJogos);
+        }
+        
+        showLoading(`⏳ Carregando ${participantesMap[chaveAba]}...`);
+        await carregarParticipante(chaveAba);
+        renderPalpites(chaveAba, selectGroup.value);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function buscarResultados(data) {
@@ -267,74 +352,47 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeFora = row.FORA;
             if (!timeCasa || !timeFora) return;
             
-            const placarCasa = (row.PLACAR_CASA !== null && row.PLACAR_CASA !== undefined && String(row.PLACAR_CASA).trim() !== '') 
-                ? String(row.PLACAR_CASA).trim() 
-                : '-';
+            const placarCasa = row.PLACAR_CASA && String(row.PLACAR_CASA).trim() !== '' 
+                ? String(row.PLACAR_CASA).trim() : '-';
+            const placarFora = row.PLACAR_FORA && String(row.PLACAR_FORA).trim() !== '' 
+                ? String(row.PLACAR_FORA).trim() : '-';
             
-            const placarFora = (row.PLACAR_FORA !== null && row.PLACAR_FORA !== undefined && String(row.PLACAR_FORA).trim() !== '') 
-                ? String(row.PLACAR_FORA).trim() 
-                : '-';
-            
-            const chave = `${timeCasa}-${timeFora}`;
-            
-            mapa[chave] = {
-                casa: placarCasa,
-                fora: placarFora
-            };
+            mapa[`${timeCasa}-${timeFora}`] = { casa: placarCasa, fora: placarFora };
         });
         
         return mapa;
     }
 
     function renderJogos(filtroGrupo = 'todos') {
-        const grupos = filtroGrupo === 'todos' 
-            ? Object.keys(todosJogos).sort()
-            : [filtroGrupo];
-        
+        const grupos = filtroGrupo === 'todos' ? Object.keys(todosJogos).sort() : [filtroGrupo];
         let html = '';
         
         grupos.forEach(grupo => {
             const jogos = todosJogos[grupo];
-            
             html += `
                 <div class="group-section">
                     <h2 class="group-title">🏆 Grupo ${grupo}</h2>
                     <div class="results-container">
                     <table class="games-table">
                         <thead>
-                            <tr>
-                                <th>Data / Hora</th>
-                                <th>Jogo</th>
-                                <th>Placar</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
+                            <tr><th>Data / Hora</th><th>Jogo</th><th>Placar</th></tr>
+                        </thead><tbody>`;
             
             jogos.forEach(jogo => {
-                const chave = `${jogo.casa}-${jogo.fora}`;
-                const resultado = resultadosCache[chave];
+                const resultado = resultadosCache[`${jogo.casa}-${jogo.fora}`];
                 let placarDisplay = '-';
-                
                 if (resultado && resultado.casa !== '-' && resultado.fora !== '-') {
                     placarDisplay = `${resultado.casa} x ${resultado.fora}`;
                 }
-                
                 html += `
                     <tr>
                         <td class="date">${jogo.data}</td>
                         <td class="teams">${jogo.casa} <span class="vs">x</span> ${jogo.fora}</td>
                         <td class="result">${placarDisplay}</td>
-                    </tr>
-                `;
+                    </tr>`;
             });
             
-            html += `
-                        </tbody>
-                    </table>
-                    </div>
-                </div>
-            `;
+            html += `</tbody></table></div></div>`;
         });
         
         contentEl.innerHTML = html;
@@ -353,68 +411,44 @@ document.addEventListener('DOMContentLoaded', () => {
     function calcularPosicao(abreviacao) {
         const totalAtual = calcularTotal(abreviacao);
         let posicao = 1;
-        
         Object.keys(participantesMap).forEach(abrev => {
             if (abrev === abreviacao) return;
-            const totalOutro = calcularTotal(abrev);
-            if (totalOutro > totalAtual) {
-                posicao++;
-            }
+            if (calcularTotal(abrev) > totalAtual) posicao++;
         });
-        
         return posicao;
     }
 
     function normalizar(str) {
         if (!str) return '';
-        return str.toString()
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim();
+        return str.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     }
 
     function renderPalpites(participante, filtroGrupo) {
         if (!participante || participante === '') {
-            contentEl.innerHTML = `
-                <div class="no-data">
-                    <p> Selecione um participante para ver os palpites</p>
-                </div>
-            `;
+            contentEl.innerHTML = `<div class="no-data"><p>🎯 Selecione um participante</p></div>`;
             return;
         }
 
         const dados = palpitesData[participante];
         
         if (!dados || dados.length === 0) {
-            const falhas = falhasCarregamento[participante] || 0;
-            
-            if (falhas >= 3) {
+            if ((falhasCarregamento[participante] || 0) >= 3) {
                 contentEl.innerHTML = `
                     <div class="no-data">
-                        <p>❌ Não foi possível carregar os dados de ${participantesMap[participante]}</p>
-                        <p style="font-size: 0.9rem; margin-top: 10px; opacity: 0.7;">
-                            Verifique sua conexão ou tente novamente mais tarde
-                        </p>
+                        <p>❌ Não foi possível carregar ${participantesMap[participante]}</p>
                         <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: var(--gold); border: none; border-radius: 8px; cursor: pointer;">
-                            🔄 Recarregar Página
+                            🔄 Recarregar
                         </button>
-                    </div>
-                `;
+                    </div>`;
                 return;
             }
             
-            contentEl.innerHTML = `
-                <div class="no-data">
-                    <p>⏳ Carregando dados de ${participantesMap[participante]}...</p>
-                </div>
-            `;
+            contentEl.innerHTML = `<div class="no-data"><p>⏳ Carregando ${participantesMap[participante]}...</p></div>`;
             
             if (!carregandoAgora[participante]) {
                 carregarParticipante(participante).then(dados => {
-                    if (dados) {
-                        renderPalpites(participante, filtroGrupo);
-                    } else {
+                    if (dados) renderPalpites(participante, filtroGrupo);
+                    else {
                         falhasCarregamento[participante] = (falhasCarregamento[participante] || 0) + 1;
                         renderPalpites(participante, filtroGrupo);
                     }
@@ -425,117 +459,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let jogosFiltrados = dados.filter(row => {
             if (!row.DATA_HORA || row.DATA_HORA.includes('GRUPO')) return false;
-            
-            if (filtroGrupo === 'todos') {
-                return true;
-            }
+            if (filtroGrupo === 'todos') return true;
             
             const casaNorm = normalizar(row.CASA);
             const foraNorm = normalizar(row.FORA);
-            
-            const grupoJogo = Object.keys(todosJogos).find(grupo => {
-                return todosJogos[grupo].some(j => 
+            const grupoJogo = Object.keys(todosJogos).find(grupo => 
+                todosJogos[grupo].some(j => 
                     normalizar(j.casa) === casaNorm || normalizar(j.fora) === foraNorm
-                );
-            });
-            
+                )
+            );
             return grupoJogo === filtroGrupo;
         });
 
         const totalPontos = jogosFiltrados.reduce((sum, row) => sum + getPontos(row), 0);
-        const placarExato = jogosFiltrados.filter(row => getPontos(row) === 20).length;
-        const vencedorEPlacar = jogosFiltrados.filter(row => getPontos(row) === 15).length;
-        const apenasVencedor = jogosFiltrados.filter(row => getPontos(row) === 10).length;
-        const apenasPlacar = jogosFiltrados.filter(row => getPontos(row) === 5).length;
-        const errou = jogosFiltrados.filter(row => getPontos(row) === 0 && row.PLACAR_CASA && row.PLACAR_CASA !== '').length;
-
         const posicao = calcularPosicao(participante);
         const totalParticipantes = Object.keys(participantesMap).length;
         const medalhaPosicao = posicao === 1 ? '🥇' : posicao === 2 ? '🥈' : posicao === 3 ? '🥉' : '';
 
         let html = `
             <div class="palpite-summary">
-                <h2> ${participantesMap[participante] || participante}</h2>
-                <div class="ranking-position">
-                    ${medalhaPosicao} ${posicao}º lugar de ${totalParticipantes} participantes
-                </div>
+                <h2>🎯 ${participantesMap[participante] || participante}</h2>
+                <div class="ranking-position">${medalhaPosicao} ${posicao}º de ${totalParticipantes}</div>
                 <div class="summary-stats">
-                    <div class="stat-box">
-                        <span class="stat-value">${totalPontos}</span>
-                        <span class="stat-label">Total</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-value" style="color: #4ade80">${placarExato}</span>
-                        <span class="stat-label">Placar Exato</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-value" style="color: #fbbf24">${vencedorEPlacar}</span>
-                        <span class="stat-label">Vencedor + 1</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-value" style="color: #60a5fa">${apenasVencedor}</span>
-                        <span class="stat-label">Só Vencedor</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-value" style="color: #a78bfa">${apenasPlacar}</span>
-                        <span class="stat-label">Só 1 Placar</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-value" style="color: #f87171">${errou}</span>
-                        <span class="stat-label">Errou</span>
-                    </div>
+                    <div class="stat-box"><span class="stat-value">${totalPontos}</span><span class="stat-label">Total</span></div>
                 </div>
             </div>
             <div class="results-container">
                 <table class="predictions-table">
                     <thead>
-                        <tr>
-                            <th class="col-date">Data / Hora</th>
-                            <th class="col-match">Jogo</th>
-                            <th>Palpite</th>
-                            <th>Real</th>
-                            <th>Pontos</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
+                        <tr><th>Data</th><th>Jogo</th><th>Palpite</th><th>Real</th><th>Pts</th></tr>
+                    </thead><tbody>`;
 
         jogosFiltrados.forEach(row => {
-            const palpiteCasa = row.PLACAR_CASA || '-';
-            const palpiteFora = row.PLACAR_FORA || '-';
-            const palpite = `${palpiteCasa} x ${palpiteFora}`;
-            
-            const chave = `${row.CASA}-${row.FORA}`;
-            const resultadoReal = resultadosCache[chave];
-            const real = resultadoReal && resultadoReal.casa !== '-'
-                ? `${resultadoReal.casa} x ${resultadoReal.fora}` 
-                : '-';
+            const palpite = `${row.PLACAR_CASA || '-'} x ${row.PLACAR_FORA || '-'}`;
+            const resultadoReal = resultadosCache[`${row.CASA}-${row.FORA}`];
+            const real = resultadoReal && resultadoReal.casa !== '-' 
+                ? `${resultadoReal.casa} x ${resultadoReal.fora}` : '-';
             
             const pontos = getPontos(row);
             let classePalpite = '';
-            
             if (pontos === 20) classePalpite = 'correct';
-            else if (pontos >= 10) classePalpite = 'partial';
             else if (pontos > 0) classePalpite = 'partial';
-            else if (palpiteCasa !== '-' && palpiteFora !== '-') classePalpite = 'wrong';
+            else if (row.PLACAR_CASA && row.PLACAR_CASA !== '-') classePalpite = 'wrong';
             
             html += `
                 <tr>
                     <td class="col-date">${row.DATA_HORA}</td>
-                    <td class="col-match">${row.CASA} <span class="vs">x</span> ${row.FORA}</td>
+                    <td class="col-match">${row.CASA} x ${row.FORA}</td>
                     <td class="prediction ${classePalpite}">${palpite}</td>
                     <td>${real}</td>
                     <td class="points ${pontos === 0 ? 'zero' : ''}">${pontos > 0 ? '+' + pontos : '-'}</td>
-                </tr>
-            `;
+                </tr>`;
         });
 
-        html += `
-                    </tbody>
-                </table>
-            </div>
-        `;
-
+        html += `</tbody></table></div>`;
         contentEl.innerHTML = html;
     }
 
@@ -547,16 +524,14 @@ document.addEventListener('DOMContentLoaded', () => {
         carregandoAgora[abrev] = true;
         
         try {
-            const dados = await fetchData(abrev);
+            let dados = await fetchData(abrev);
             if (dados) {
+                dados = normalizarDados(dados, abrev);
                 palpitesData[abrev] = dados;
-                console.log(`✅ Carregado: ${abrev}`);
                 return dados;
-            } else {
-                falhasCarregamento[abrev] = (falhasCarregamento[abrev] || 0) + 1;
-                console.log(`❌ Falha ao carregar ${abrev} (tentativa ${falhasCarregamento[abrev]}/3)`);
-                return null;
             }
+            falhasCarregamento[abrev] = (falhasCarregamento[abrev] || 0) + 1;
+            return null;
         } finally {
             carregandoAgora[abrev] = false;
         }
@@ -570,27 +545,19 @@ document.addEventListener('DOMContentLoaded', () => {
             abrev => !palpitesData[abrev] && (falhasCarregamento[abrev] || 0) < 3
         );
         
-        console.log(` Carregando ${pendentes.length} participantes em background...`);
-        
         for (const abrev of pendentes) {
             await new Promise(resolve => setTimeout(resolve, 2000));
             await carregarParticipante(abrev);
         }
         
         carregandoEmBackground = false;
-        console.log('🎉 Background completo!');
     }
 
     function popularSelectParticipantes() {
-        const opcoes = Object.keys(participantesMap).map(abrev => {
-            const nome = participantesMap[abrev];
-            return `<option value="${abrev}">${nome}</option>`;
-        }).join('');
-        
-        selectParticipant.innerHTML = `
-            <option value="">Selecione...</option>
-            ${opcoes}
-        `;
+        const opcoes = Object.keys(participantesMap).map(abrev => 
+            `<option value="${abrev}">${participantesMap[abrev]}</option>`
+        ).join('');
+        selectParticipant.innerHTML = `<option value="">Selecione...</option>${opcoes}`;
     }
 
     btnRanking.addEventListener('click', async () => {
@@ -600,14 +567,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRanking.classList.add('active');
         filterContainer.style.display = 'none';
         showLoading();
-        
         const data = await fetchData('PLACAR GERAL');
-        if (data) {
-            placarGeralCache = data;
-            renderRanking(data);
-        } else {
-            showError('Erro ao carregar PLACAR GERAL. Tente novamente.');
-        }
+        if (data) renderRanking(data);
     });
 
     btnJogos.addEventListener('click', async () => {
@@ -616,12 +577,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
         btnJogos.classList.add('active');
         filterContainer.style.display = 'flex';
-        
         selectParticipant.parentElement.style.display = 'none';
         selectGroup.parentElement.style.display = 'flex';
-        
         showLoading();
-        
         const data = await fetchData('Jogos');
         if (data) {
             resultadosCache = buscarResultados(data);
@@ -635,16 +593,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
         btnPalpites.classList.add('active');
         filterContainer.style.display = 'flex';
-        
         selectParticipant.parentElement.style.display = 'flex';
         selectGroup.parentElement.style.display = 'flex';
         
         if (Object.keys(resultadosCache).length === 0) {
-            showLoading('⏳ Buscando resultados dos jogos...');
+            showLoading('⏳ Buscando jogos...');
             const dataJogos = await fetchData('Jogos');
-            if (dataJogos) {
-                resultadosCache = buscarResultados(dataJogos);
-            }
+            if (dataJogos) resultadosCache = buscarResultados(dataJogos);
         }
         
         if (selectParticipant.value) {
@@ -660,17 +615,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnRefresh) {
         btnRefresh.addEventListener('click', async () => {
-            showLoading('🔄 Atualizando dados da planilha...');
-            
+            showLoading('🔄 Atualizando...');
             Object.keys(localStorage).forEach(key => {
                 if (key.startsWith('cache_')) localStorage.removeItem(key);
             });
-            
             palpitesData = {};
             resultadosCache = {};
             placarGeralCache = null;
-            
-            console.log('🗑️ Todos os caches limpos!');
             
             if (currentView === 'ranking') {
                 const data = await fetchData('PLACAR GERAL');
@@ -683,10 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentView === 'palpites') {
                 const dataJogos = await fetchData('Jogos');
-                if (dataJogos) {
-                    resultadosCache = buscarResultados(dataJogos);
-                }
-                
+                if (dataJogos) resultadosCache = buscarResultados(dataJogos);
                 if (selectParticipant.value) {
                     await carregarParticipante(selectParticipant.value);
                     renderPalpites(selectParticipant.value, selectGroup.value);
@@ -714,7 +662,10 @@ document.addEventListener('DOMContentLoaded', () => {
     popularSelectParticipantes();
     btnRanking.click();
 
+    // Expõe variáveis para debug
     window.palpitesData = palpitesData;
     window.resultadosCache = resultadosCache;
     window.todosJogos = todosJogos;
+    window.nomeParaChave = nomeParaChave;
+    window.participantesMap = participantesMap;
 });
